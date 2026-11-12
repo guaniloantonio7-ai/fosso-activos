@@ -8,8 +8,8 @@
   <title>FOSSO - Inventario Activos Fijos</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-  <!-- Librería especializada en códigos de barras lineales 1D (Code 128) -->
-  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <!-- Quagga2: Motor especializado en códigos de barras industriales (Code 128, Code 39, Code 93) -->
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
     :root {
       --primary-dark: #163a5f;
@@ -123,42 +123,57 @@
       display: none;
     }
 
-    /* Visor de cámara optimizado para iOS */
+    /* Visor Quagga2 recortado solo a la franja central */
     #scannerContainer {
       display: none;
       position: relative;
       width: 100%;
+      height: 170px;
       margin-top: 10px;
       border-radius: 8px;
       overflow: hidden;
       background: #000;
     }
-    #videoPreview {
-      width: 100%;
-      height: 180px;
+    #scannerContainer video, #scannerContainer canvas {
+      width: 100% !important;
+      height: 170px !important;
       object-fit: cover;
-      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    .scan-box-target {
+      position: absolute;
+      top: 25%;
+      left: 15%;
+      width: 70%;
+      height: 50%;
+      border: 2px solid #00ff66;
+      border-radius: 6px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      z-index: 10;
     }
     .scan-guide {
       position: absolute;
       top: 50%;
-      left: 10%;
-      right: 10%;
+      left: 18%;
+      right: 18%;
       height: 2px;
       background: #ff2e2e;
       box-shadow: 0 0 8px #ff2e2e;
-      transform: translateY(-50%);
+      z-index: 11;
       pointer-events: none;
     }
     .scan-hint {
       position: absolute;
-      bottom: 6px;
+      bottom: 4px;
       width: 100%;
       text-align: center;
       color: white;
-      font-size: 0.75rem;
-      background: rgba(0,0,0,0.55);
-      padding: 3px 0;
+      font-size: 0.72rem;
+      z-index: 12;
+      pointer-events: none;
     }
 
     .btn-photo {
@@ -238,15 +253,15 @@
     <label class="accent-blue">1. Código de Barras FOSSO</label>
     <div class="af-input-group">
       <span class="af-prefix">AF -</span>
-      <input type="text" id="numAF" inputmode="numeric" placeholder="0278" oninput="verificarHistorialLocal(this.value)">
+      <input type="text" id="numAF" inputmode="numeric" placeholder="0537" oninput="verificarHistorialLocal(this.value)">
       <button type="button" class="btn-scan" id="btnScan" onclick="toggleScanner()">📷 Escanear</button>
     </div>
     <div id="lookupMsg" class="status-lookup"></div>
 
     <div id="scannerContainer">
-      <video id="videoPreview" playsinline muted></video>
+      <div class="scan-box-target"></div>
       <div class="scan-guide"></div>
-      <div class="scan-hint">Alinea la línea roja sobre las barras de la etiqueta</div>
+      <div class="scan-hint">Encuadra SOLO las barras dentro del recuadro verde</div>
     </div>
 
     <div style="margin-top: 10px;">
@@ -254,6 +269,7 @@
       <select id="campanaInv">
         <option value="INV 2026">INV 2026</option>
         <option value="INV 2025">INV 2025</option>
+        <option value="INV 2023">INV 2023</option>
         <option value="SIN ETIQUETA">SIN ETIQUETA</option>
       </select>
     </div>
@@ -332,8 +348,8 @@
 <script>
   let activos = JSON.parse(localStorage.getItem('fosso_activos_af')) || [];
   let fotoBase64Actual = "";
-  let codeReader = null;
   let scannerActivo = false;
+  let lecturasConfirmadas = {};
 
   actualizarUI();
 
@@ -357,8 +373,8 @@
     }
   }
 
-  // Escáner ZXing multi-formato 1D compatible con cámara iOS Safari
-  async function toggleScanner() {
+  // Motor Quagga2 calibrado para Code 128 / Code 39 / Code 93 de etiquetas FOSSO
+  function toggleScanner() {
     const container = document.getElementById('scannerContainer');
     const btn = document.getElementById('btnScan');
 
@@ -367,43 +383,75 @@
       return;
     }
 
-    try {
-      container.style.display = 'block';
-      btn.innerText = '✖ Cerrar';
-      btn.classList.add('active');
-      scannerActivo = true;
+    container.style.display = 'block';
+    btn.innerText = '✖ Cerrar';
+    btn.classList.add('active');
+    scannerActivo = true;
+    lecturasConfirmadas = {};
 
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      await codeReader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: container,
+        constraints: {
+          facingMode: "environment",
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 }
         },
-        'videoPreview',
-        (result, err) => {
-          if (result) {
-            const raw = result.getText();
-            const limpio = raw.toUpperCase().replace(/AF\s*-\s*/g, '').trim();
-            document.getElementById('numAF').value = limpio;
-            verificarHistorialLocal(limpio);
-            if (navigator.vibrate) navigator.vibrate(100);
-            detenerScanner();
-          }
+        // Recorta la lectura solo al recuadro verde central para ignorar textos laterales de la etiqueta
+        area: {
+          top: "25%",
+          right: "15%",
+          left: "15%",
+          bottom: "25%"
         }
-      );
-    } catch (e) {
-      alert("No se pudo acceder a la cámara: " + e.message);
-      detenerScanner();
-    }
+      },
+      locator: {
+        patchSize: "medium",
+        halfSample: false
+      },
+      numOfWorkers: 0,
+      frequency: 15,
+      decoder: {
+        readers: [
+          "code_128_reader",
+          "code_39_reader",
+          "code_93_reader",
+          "codabar_reader"
+        ]
+      },
+      locate: true
+    }, function(err) {
+      if (err) {
+        alert("Error al iniciar escáner: " + err);
+        detenerScanner();
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onDetected(function(data) {
+      if (!data || !data.codeResult || !data.codeResult.code) return;
+      const raw = data.codeResult.code.trim();
+
+      // Filtro de confianza: exige leer el mismo código 2 veces seguidas para evitar falsos positivos
+      lecturasConfirmadas[raw] = (lecturasConfirmadas[raw] || 0) + 1;
+      if (lecturasConfirmadas[raw] >= 2) {
+        const limpio = raw.toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/^AF/, '');
+        document.getElementById('numAF').value = limpio;
+        verificarHistorialLocal(limpio);
+        if (navigator.vibrate) navigator.vibrate(100);
+        detenerScanner();
+      }
+    });
   }
 
   function detenerScanner() {
-    if (codeReader) {
-      codeReader.reset();
-    }
+    try {
+      Quagga.offDetected();
+      Quagga.stop();
+    } catch (e) {}
     document.getElementById('scannerContainer').style.display = 'none';
     const btn = document.getElementById('btnScan');
     btn.innerText = '📷 Escanear';
