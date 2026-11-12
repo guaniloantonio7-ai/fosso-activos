@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>FOSSO - Inventario Activos Fijos</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root {
+      --primary-dark: #163a5f;
+      --btn-blue: #1d446b;
+      --btn-slate: #435365;
+      --btn-green: #229954;
+      --btn-red: #c0392b;
+      --bg-gray: #eef1f5;
+      --border-color: #d5dce4;
+      --text-main: #1f2d3d;
+      --text-muted: #6c7a89;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { margin: 0; background-color: var(--bg-gray); color: var(--text-main); padding-bottom: 30px; }
+
+    header {
+      background-color: var(--primary-dark);
+      color: white;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    header h1 { margin: 0; font-size: 1.12rem; font-weight: 700; }
+    header p { margin: 2px 0 0; font-size: 0.75rem; color: #cfd8e3; }
+
+    .header-actions { display: flex; gap: 6px; }
+    .btn-export {
+      border: none;
+      padding: 8px 11px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: white;
+      cursor: pointer;
+    }
+    .btn-pdf { background-color: var(--btn-red); }
+    .btn-csv { background-color: var(--btn-green); }
+
+    .card {
+      background: white;
+      margin: 14px;
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .card-title {
+      color: var(--primary-dark);
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0 0 14px 0;
+    }
+
+    .row-3 { display: grid; grid-template-columns: 58px 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+
+    label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; color: var(--text-main); }
+    label.accent-blue { color: var(--primary-dark); }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 0.92rem;
+      background: #fff;
+      color: var(--text-main);
+    }
+    textarea { resize: vertical; min-height: 58px; }
+
+    .tag-box {
+      background: #f4f7fb;
+      border: 1.5px dashed #2e6da4;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .af-input-group { display: flex; gap: 6px; align-items: center; }
+    .af-prefix {
+      background: var(--primary-dark);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+    .btn-scan {
+      background: #0e7490;
+      color: white;
+      border: none;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .status-lookup {
+      font-size: 0.78rem;
+      margin-top: 6px;
+      font-weight: 600;
+      color: #1e8449;
+      display: none;
+    }
+
+    #reader { width: 100%; margin-top: 10px; border-radius: 8px; overflow: hidden; display: none; }
+
+    .btn-photo {
+      width: 100%;
+      background-color: var(--btn-slate);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 8px 0 14px;
+      cursor: pointer;
+    }
+    .btn-photo.has-photo { background-color: var(--btn-green); }
+
+    .btn-save {
+      width: 100%;
+      background-color: var(--btn-blue);
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    .preview-img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: none;
+      border: 1px solid var(--border-color);
+    }
+
+    .history-item {
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 0;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-thumb { width: 62px; height: 62px; border-radius: 8px; object-fit: cover; background: #e2e8f0; flex-shrink: 0; }
+    .history-info { flex: 1; font-size: 0.84rem; line-height: 1.35; }
+    .tag-pill { background: #163a5f; color: #fff; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.75rem; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; color: white; }
+    .badge.BUENO { background: #229954; }
+    .badge.REGULAR { background: #d68910; }
+    .badge.MALO { background: #c0392b; }
+
+    .btn-del { background: #fadbd8; color: #c0392b; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+    footer { text-align: center; font-size: 0.82rem; color: var(--text-muted); margin-top: 18px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>FOSSO - Activos Fijos</h1>
+    <p>Levantamiento de Equipos (AF)</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn-export btn-csv" onclick="exportarCSV()">📊 Excel</button>
+    <button class="btn-export btn-pdf" onclick="generarPDF()">📄 PDF</button>
+  </div>
+</header>
+
+<div class="card">
+  <h2 class="card-title">Registro de Equipo FOSSO</h2>
+
+  <div class="tag-box">
+    <label class="accent-blue">1. Escanear Código de Barras con Cámara</label>
+    <div class="af-input-group">
+      <span class="af-prefix">AF -</span>
+      <input type="text" id="numAF" inputmode="numeric" placeholder="0278" oninput="verificarHistorialLocal(this.value)">
+      <button type="button" class="btn-scan" onclick="toggleScanner()">📷 Escanear</button>
+    </div>
+    <div id="lookupMsg" class="status-lookup"></div>
+    <div id="reader"></div>
+
+    <div class="row-2" style="margin-top: 10px; margin-bottom: 0;">
+      <div>
+        <label>Campaña Etiqueta</label>
+        <select id="campanaInv">
+          <option value="INV 2026">INV 2026</option>
+          <option value="INV 2025">INV 2025</option>
+          <option value="SIN ETIQUETA">SIN ETIQUETA</option>
+        </select>
+      </div>
+      <div>
+        <label>Cód. Anterior (Opcional)</label>
+        <input type="text" id="codAnterior" placeholder="Ej. AF - 0685">
+      </div>
+    </div>
+  </div>
+
+  <div class="row-3">
+    <div>
+      <label>Ítem</label>
+      <input type="number" id="itemNum" value="1" readonly>
+    </div>
+    <div>
+      <label>Área</label>
+      <select id="area">
+        <option value="COCINA">COCINA</option>
+        <option value="COMEDOR">COMEDOR</option>
+        <option value="ALMACÉN">ALMACÉN</option>
+        <option value="CÁMARA FRÍA">CÁMARA FRÍA</option>
+        <option value="PANADERÍA">PANADERÍA</option>
+        <option value="OFICINA">OFICINA</option>
+      </select>
+    </div>
+    <div>
+      <label>Estado</label>
+      <select id="condicion">
+        <option value="BUENO">BUENO</option>
+        <option value="REGULAR">REGULAR</option>
+        <option value="MALO">MALO / BAJA</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-bottom: 12px;">
+    <label class="accent-blue">Sede / Operación / Unidad</label>
+    <input type="text" id="unidad" placeholder="Ej. Agrolmos, UniFrutti, Oficina Trujillo...">
+  </div>
+
+  <div style="margin-bottom: 12px;">
+    <label class="accent-blue">Descripción del Equipo / Máquina</label>
+    <input type="text" id="nombreEquipo" placeholder="Ej. Mesa de trabajo acero inox, Congeladora...">
+  </div>
+
+  <div class="row-2">
+    <div>
+      <label>Marca / Modelo</label>
+      <input type="text" id="marcaModelo" placeholder="Ej. Coldex / CH-400">
+    </div>
+    <div>
+      <label>N° Serie Fábrica</label>
+      <input type="text" id="numSerie" placeholder="Ej. SN-884210">
+    </div>
+  </div>
+
+  <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="procesarFoto(event)">
+  <button type="button" class="btn-photo" id="btnFoto" onclick="document.getElementById('fotoInput').click()">
+    📷 Tomar Foto (Equipo + Etiqueta AF)
+  </button>
+  <img id="previewImg" class="preview-img" alt="Vista previa del activo">
+
+  <div style="margin-bottom: 12px;">
+    <label>Observaciones</label>
+    <textarea id="observacion" placeholder="Detalles del estado físico, placa legible, etc..."></textarea>
+  </div>
+
+  <button type="button" class="btn-save" onclick="guardarActivo()">💾 Guardar Activo FOSSO</button>
+</div>
+
+<div class="card">
+  <h2 class="card-title" style="margin-bottom: 6px;">Activos Inventariados (<span id="contadorActivos">0</span>)</h2>
+  <div id="listaHistorial"></div>
+</div>
+
+<footer>
+  Desarrollado por: Ing. Antonio Guanilo Gonzales
+</footer>
+
+<script>
+  let activos = JSON.parse(localStorage.getItem('fosso_activos_af')) || [];
+  let fotoBase64Actual = "";
+  let html5QrCode = null;
+  let scannerActivo = false;
+
+  actualizarUI();
+
+  // Si el código ya fue registrado previamente en este dispositivo, recupera sus datos
+  function verificarHistorialLocal(valor) {
+    const limpio = valor.toUpperCase().replace(/AF\s*-\s*/g, '').trim();
+    const msg = document.getElementById('lookupMsg');
+    if (!limpio) {
+      msg.style.display = "none";
+      return;
+    }
+
+    const existente = activos.find(a => a.codigoAF === `AF - ${limpio}`);
+    if (existente) {
+      document.getElementById('nombreEquipo').value = existente.nombre;
+      document.getElementById('marcaModelo').value = existente.marcaModelo;
+      document.getElementById('numSerie').value = existente.numSerie;
+      msg.innerText = `ℹ️ Ya registrado en tu historial: ${existente.nombre}`;
+      msg.style.display = "block";
+    } else {
+      msg.style.display = "none";
+    }
+  }
+
+  // Escáner con cámara trasera del celular
+  function toggleScanner() {
+    const readerDiv = document.getElementById('reader');
+    if (scannerActivo) {
+      html5QrCode.stop().then(() => {
+        readerDiv.style.display = 'none';
+        scannerActivo = false;
+      });
+      return;
+    }
+
+    readerDiv.style.display = 'block';
+    html5QrCode = new Html5Qrcode("reader");
+    scannerActivo = true;
+
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 110 } },
+      (decodedText) => {
+        const limpio = decodedText.toUpperCase().replace(/AF\s*-\s*/g, '').trim();
+        document.getElementById('numAF').value = limpio;
+        verificarHistorialLocal(limpio);
+
+        html5QrCode.stop().then(() => {
+          readerDiv.style.display = 'none';
+          scannerActivo = false;
+        });
+      },
+      () => {}
+    ).catch(err => {
+      alert("Asegúrate de abrir la web en HTTPS (GitHub Pages) y dar permiso de cámara.");
+      readerDiv.style.display = 'none';
+      scannerActivo = false;
+    });
+  }
+
+  function procesarFoto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 700;
+        const scale = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        fotoBase64Actual = canvas.toDataURL('image/jpeg', 0.72);
+
+        const preview = document.getElementById('previewImg');
+        preview.src = fotoBase64Actual;
+        preview.style.display = 'block';
+
+        const btn = document.getElementById('btnFoto');
+        btn.classList.add('has-photo');
+        btn.innerText = "✅ Foto Adjuntada (Tocar para cambiar)";
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function guardarActivo() {
+    const rawAF = document.getElementById('numAF').value.trim().toUpperCase().replace(/AF\s*-\s*/g, '');
+    const nombre = document.getElementById('nombreEquipo').value.trim();
+
+    if (!nombre) {
+      alert("Ingresa la descripción del equipo o máquina.");
+      return;
+    }
+
+    const codigoAF = rawAF ? `AF - ${rawAF}` : "SIN CÓDIGO AF";
+
+    if (rawAF && activos.some(a => a.codigoAF === codigoAF)) {
+      if (!confirm(`El código ${codigoAF} ya está en la lista. ¿Deseas registrarlo nuevamente?`)) return;
+    }
+
+    activos.push({
+      id: Date.now(),
+      item: activos.length + 1,
+      codigoAF: codigoAF,
+      campanaInv: document.getElementById('campanaInv').value,
+      codAnterior: document.getElementById('codAnterior').value.trim() || "-",
+      unidad: document.getElementById('unidad').value.trim() || "No especificada",
+      area: document.getElementById('area').value,
+      condicion: document.getElementById('condicion').value,
+      nombre: nombre,
+      marcaModelo: document.getElementById('marcaModelo').value.trim() || "S/M",
+      numSerie: document.getElementById('numSerie').value.trim() || "S/N",
+      fechaRegistro: new Date().toLocaleDateString('es-PE'),
+      observacion: document.getElementById('observacion').value.trim() || "Sin observaciones",
+      foto: fotoBase64Actual
+    });
+
+    localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
+
+    document.getElementById('numAF').value = "";
+    document.getElementById('codAnterior').value = "";
+    document.getElementById('nombreEquipo').value = "";
+    document.getElementById('marcaModelo').value = "";
+    document.getElementById('numSerie').value = "";
+    document.getElementById('observacion').value = "";
+    document.getElementById('lookupMsg').style.display = "none";
+    fotoBase64Actual = "";
+    document.getElementById('previewImg').style.display = 'none';
+    const btn = document.getElementById('btnFoto');
+    btn.classList.remove('has-photo');
+    btn.innerText = "📷 Tomar Foto (Equipo + Etiqueta AF)";
+
+    actualizarUI();
+  }
+
+  function eliminarActivo(id) {
+    if (!confirm("¿Eliminar este equipo del inventario?")) return;
+    activos = activos.filter(a => a.id !== id).map((a, idx) => ({ ...a, item: idx + 1 }));
+    localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
+    actualizarUI();
+  }
+
+  function actualizarUI() {
+    document.getElementById('itemNum').value = activos.length + 1;
+    document.getElementById('contadorActivos').innerText = activos.length;
+    const contenedor = document.getElementById('listaHistorial');
+
+    if (activos.length === 0) {
+      contenedor.innerHTML = '<p style="color: var(--text-muted); font-size: 0.88rem;">Aún no hay equipos registrados.</p>';
+      return;
+    }
+
+    contenedor.innerHTML = activos.map(a => `
+      <div class="history-item">
+        ${a.foto ? `<img src="${a.foto}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#666;">Sin foto</div>`}
+        <div class="history-info">
+          <span class="tag-pill">${a.codigoAF}</span> <small style="color:#163a5f;font-weight:700;">(${a.campanaInv})</small><br>
+          <strong>#${a.item} - ${a.nombre}</strong><br>
+          <span>Serie: <b>${a.numSerie}</b> | ${a.marcaModelo}</span><br>
+          <span>${a.unidad} · ${a.area}</span> · <span class="badge ${a.condicion}">${a.condicion}</span>
+        </div>
+        <button class="btn-del" onclick="eliminarActivo(${a.id})">✕</button>
+      </div>
+    `).join('');
+  }
+
+  // Exportar base de datos limpia para abrir directo en Excel
+  function exportarCSV() {
+    if (activos.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
+
+    const cabeceras = ["Item", "Codigo_FOSSO", "Campana", "Codigo_Anterior", "Sede_Unidad", "Area", "Descripcion_Equipo", "Marca_Modelo", "Numero_Serie", "Estado", "Fecha_Registro", "Observaciones"];
+    const filas = activos.map(a => [
+      a.item, a.codigoAF, a.campanaInv, a.codAnterior, a.unidad, a.area,
+      a.nombre, a.marcaModelo, a.numSerie, a.condicion, a.fechaRegistro, a.observacion
+    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(";"));
+
+    const csvContent = "\uFEFF" + [cabeceras.join(";"), ...filas].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Base_Activos_FOSSO_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+  }
+
+  function generarPDF() {
+    if (activos.length === 0) {
+      alert("No hay equipos inventariados para exportar.");
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    doc.setFillColor(22, 58, 95);
+    doc.rect(0, 0, 210, 26, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("FOSSO FOOD & SERVICES SOLUTION", 14, 11);
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.text("INVENTARIO FÍSICO DE ACTIVOS FIJOS (ETIQUETADO AF)", 14, 18);
+    doc.text(`Emisión: ${new Date().toLocaleDateString('es-PE')}`, 160, 18);
+
+    const filas = activos.map(a => [
+      a.item,
+      `${a.codigoAF}\n(${a.campanaInv})\nAnt: ${a.codAnterior}`,
+      `${a.nombre}\nMarca/Mod: ${a.marcaModelo}\nSerie: ${a.numSerie}`,
+      `${a.unidad}\nÁrea: ${a.area}\nEstado: ${a.condicion}`,
+      `${a.observacion}`,
+      ""
+    ]);
+
+    doc.autoTable({
+      startY: 32,
+      head: [['Ítem', 'Cód. FOSSO', 'Descripción / Serie', 'Ubicación / Estado', 'Observaciones', 'Evidencia']],
+      body: filas,
+      theme: 'grid',
+      headStyles: { fillColor: [22, 58, 95], textColor: 255, fontSize: 8, halign: 'center' },
+      styles: { fontSize: 7.8, cellPadding: 2.5, valign: 'middle' },
+      columnStyles: {
+        0: { cellWidth: 9, halign: 'center' },
+        1: { cellWidth: 27, halign: 'center', fontStyle: 'bold' },
+        2: { cellWidth: 44 },
+        3: { cellWidth: 32 },
+        4: { cellWidth: 32 },
+        5: { cellWidth: 38, minCellHeight: 30 }
+      },
+      didDrawCell: function(data) {
+        if (data.section === 'body' && data.column.index === 5) {
+          const a = activos[data.row.index];
+          if (a && a.foto) {
+            doc.addImage(a.foto, 'JPEG', data.cell.x + 2, data.cell.y + 2, 34, 26);
+          }
+        }
+      }
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.setTextColor(31, 45, 61);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Total de activos propios inventariados: ${activos.length} unidad(es).`, 14, finalY);
+
+    doc.setTextColor(100);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("Levantamiento realizado por: Ing. Antonio Guanilo Gonzales - Logística Corporativa FOSSO", 14, finalY + 6);
+
+    doc.save(`Inventario_AF_FOSSO_${new Date().toISOString().slice(0,10)}.pdf`);
+  }
+</script>
+
+</body>
+</html>
