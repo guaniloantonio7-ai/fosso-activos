@@ -8,6 +8,7 @@
   <title>FOSSO - Inventario Activos Fijos</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
     :root {
@@ -37,19 +38,20 @@
       z-index: 100;
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-    header h1 { margin: 0; font-size: 1.12rem; font-weight: 700; }
-    header p { margin: 2px 0 0; font-size: 0.75rem; color: #cfd8e3; }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+    header p { margin: 2px 0 0; font-size: 0.72rem; color: #a3e4d7; font-weight: 600; }
 
     .header-actions { display: flex; gap: 6px; }
     .btn-export {
       border: none;
-      padding: 8px 11px;
+      padding: 8px 10px;
       border-radius: 6px;
       font-weight: 700;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       color: white;
       cursor: pointer;
     }
+    .btn-sync { background-color: #0e7490; }
     .btn-pdf { background-color: var(--btn-red); }
     .btn-csv { background-color: var(--btn-green); }
 
@@ -118,7 +120,7 @@
       font-size: 0.78rem;
       margin-top: 6px;
       font-weight: 600;
-      color: #1e8449;
+      color: #b9770e;
       display: none;
     }
 
@@ -189,6 +191,7 @@
       margin-top: 8px;
       cursor: pointer;
     }
+    .btn-save:disabled { opacity: 0.6; }
 
     .preview-img {
       width: 100%;
@@ -198,6 +201,14 @@
       margin-bottom: 12px;
       display: none;
       border: 1px solid var(--border-color);
+    }
+
+    .filter-bar {
+      background: #f8fafc;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 12px;
     }
 
     .history-item {
@@ -233,10 +244,11 @@
 <header>
   <div>
     <h1>FOSSO - Activos Fijos</h1>
-    <p>Inventario Físico (AF)</p>
+    <p id="syncStatus">● Conectando en vivo...</p>
   </div>
   <div class="header-actions">
-    <button class="btn-export btn-csv" onclick="exportarCSV()">📊 Excel</button>
+    <button class="btn-export btn-sync" onclick="sincronizarNube()" title="Sincronizar ahora">🔄</button>
+    <button class="btn-export btn-csv" onclick="exportarExcel()">📊 Excel</button>
     <button class="btn-export btn-pdf" onclick="generarPDF()">📄 PDF</button>
   </div>
 </header>
@@ -343,11 +355,41 @@
     <textarea id="observacion" placeholder="Detalles del estado físico, cantidad de niveles, placa legible, etc..."></textarea>
   </div>
 
-  <button type="button" class="btn-save" onclick="guardarActivo()">💾 Guardar en Inventario FOSSO</button>
+  <button type="button" class="btn-save" id="btnGuardar" onclick="guardarActivo()">💾 Guardar en Inventario FOSSO</button>
 </div>
 
 <div class="card">
-  <h2 class="card-title" style="margin-bottom: 6px;">Bienes Inventariados (<span id="contadorActivos">0</span>)</h2>
+  <h2 class="card-title" style="margin-bottom: 10px;">Historial Compartido (<span id="contadorActivos">0</span>)</h2>
+
+  <div class="filter-bar">
+    <div class="row-2" style="margin-bottom: 0;">
+      <div>
+        <label style="font-size: 0.74rem;">Filtrar por Área:</label>
+        <select id="filtroArea" onchange="actualizarUI()" style="padding: 7px; font-size: 0.82rem;">
+          <option value="TODAS">TODAS LAS ÁREAS</option>
+          <option value="COMEDOR">COMEDOR</option>
+          <option value="VAJILLA">VAJILLA</option>
+          <option value="COCINA">COCINA</option>
+          <option value="ALMACÉN DE ABARROTES">ALMACÉN DE ABARROTES</option>
+          <option value="REEFER DE VERDURAS, TUBÉRCULOS Y FRUTAS">REEFER VERDURAS/TUB/FRUTAS</option>
+          <option value="REEFER DE PRE ELABORADOS">REEFER PRE ELABORADOS</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size: 0.74rem;">Filtrar por Tipo de Bien:</label>
+        <select id="filtroTipo" onchange="actualizarUI()" style="padding: 7px; font-size: 0.82rem;">
+          <option value="TODOS">TODOS LOS BIENES</option>
+          <option value="EQUIPO / MAQUINARIA">EQUIPO / MAQUINARIA</option>
+          <option value="MOBILIARIO">MOBILIARIO</option>
+          <option value="ESTANTERÍA / RACKS">ESTANTERÍA / RACKS</option>
+          <option value="MENAJE / VAJILLA">MENAJE / VAJILLA</option>
+          <option value="CÓMPUTO / ELECTRÓNICA">CÓMPUTO / ELECTRÓNICA</option>
+          <option value="OTROS BIENES">OTROS BIENES</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <div id="listaHistorial"></div>
 </div>
 
@@ -356,12 +398,34 @@
 </footer>
 
 <script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbz4FhZfK13GEGwj80VRm0M3D0tV8LBtili77zeECOWeO9fNDH6zC9F3VOycB2PDAwI/exec";
+
   let activos = JSON.parse(localStorage.getItem('fosso_activos_af')) || [];
   let fotoBase64Actual = "";
   let scannerActivo = false;
   let lecturasConfirmadas = {};
 
   actualizarUI();
+  sincronizarNube();
+  setInterval(sincronizarNube, 8000);
+
+  async function sincronizarNube() {
+    const statusEl = document.getElementById('syncStatus');
+    try {
+      const resp = await fetch(API_URL);
+      const data = await resp.json();
+      if (Array.isArray(data)) {
+        activos = data;
+        localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
+        actualizarUI();
+        statusEl.innerText = "● En línea (Historial compartido)";
+        statusEl.style.color = "#a3e4d7";
+      }
+    } catch (e) {
+      statusEl.innerText = "● Sin conexión (Guardado local)";
+      statusEl.style.color = "#f9e79f";
+    }
+  }
 
   function verificarHistorialLocal(valor) {
     const limpio = valor.toUpperCase().replace(/AF\s*-\s*/g, '').trim();
@@ -376,7 +440,7 @@
       document.getElementById('nombreEquipo').value = existente.nombre;
       document.getElementById('marcaModelo').value = existente.marcaModelo;
       document.getElementById('numSerie').value = existente.numSerie;
-      msg.innerText = `ℹ️ Ya registrado anteriormente: ${existente.nombre}`;
+      msg.innerText = `⚠️ Ya registrado en el historial compartido (${existente.area}): ${existente.nombre}`;
       msg.style.display = "block";
     } else {
       msg.style.display = "none";
@@ -491,14 +555,14 @@
       const img = new Image();
       img.onload = function() {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 650;
+        const MAX_WIDTH = 460;
         const scale = MAX_WIDTH / img.width;
         canvas.width = MAX_WIDTH;
         canvas.height = img.height * scale;
 
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        fotoBase64Actual = canvas.toDataURL('image/jpeg', 0.72);
+        fotoBase64Actual = canvas.toDataURL('image/jpeg', 0.65);
 
         const preview = document.getElementById('previewImg');
         preview.src = fotoBase64Actual;
@@ -513,7 +577,7 @@
     reader.readAsDataURL(file);
   }
 
-  function guardarActivo() {
+  async function guardarActivo() {
     const rawAF = document.getElementById('numAF').value.trim().toUpperCase().replace(/AF\s*-\s*/g, '');
     const nombre = document.getElementById('nombreEquipo').value.trim();
 
@@ -525,10 +589,14 @@
     const codigoAF = rawAF ? `AF - ${rawAF}` : "SIN CÓDIGO AF";
 
     if (rawAF && activos.some(a => a.codigoAF === codigoAF)) {
-      if (!confirm(`El código ${codigoAF} ya está en la lista. ¿Deseas registrarlo nuevamente?`)) return;
+      if (!confirm(`El código ${codigoAF} ya fue registrado en el historial compartido. ¿Deseas guardarlo de todas formas?`)) return;
     }
 
-    activos.push({
+    const btnGuardar = document.getElementById('btnGuardar');
+    btnGuardar.disabled = true;
+    btnGuardar.innerText = "⏳ Guardando en tiempo real...";
+
+    const nuevoItem = {
       id: Date.now(),
       item: activos.length + 1,
       codigoAF: codigoAF,
@@ -543,9 +611,19 @@
       fechaRegistro: new Date().toLocaleDateString('es-PE'),
       observacion: document.getElementById('observacion').value.trim() || "Sin observaciones",
       foto: fotoBase64Actual
-    });
+    };
 
+    activos.push(nuevoItem);
     localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
+
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(nuevoItem)
+      });
+      setTimeout(sincronizarNube, 1500);
+    } catch (e) {}
 
     document.getElementById('numAF').value = "";
     document.getElementById('nombreEquipo').value = "";
@@ -559,64 +637,118 @@
     btn.classList.remove('has-photo');
     btn.innerText = "📷 Tomar Foto del Bien / Etiqueta";
 
+    btnGuardar.disabled = false;
+    btnGuardar.innerText = "💾 Guardar en Inventario FOSSO";
     actualizarUI();
   }
 
-  function eliminarActivo(id) {
-    if (!confirm("¿Eliminar este registro del inventario?")) return;
-    activos = activos.filter(a => a.id !== id).map((a, idx) => ({ ...a, item: idx + 1 }));
+  async function eliminarActivo(id) {
+    if (!confirm("¿Eliminar este registro del historial compartido?")) return;
+    activos = activos.filter(a => String(a.id) !== String(id)).map((a, idx) => ({ ...a, item: idx + 1 }));
     localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
     actualizarUI();
+
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ action: "delete", id: id })
+      });
+    } catch (e) {}
+  }
+
+  function obtenerFiltrados() {
+    const fArea = document.getElementById('filtroArea').value;
+    const fTipo = document.getElementById('filtroTipo').value;
+    return activos.filter(a => {
+      const okArea = fArea === "TODAS" || a.area === fArea;
+      const okTipo = fTipo === "TODOS" || (a.categoriaBien || "EQUIPO / MAQUINARIA") === fTipo;
+      return okArea && okTipo;
+    });
   }
 
   function actualizarUI() {
     document.getElementById('itemNum').value = activos.length + 1;
-    document.getElementById('contadorActivos').innerText = activos.length;
+    const filtrados = obtenerFiltrados();
+    document.getElementById('contadorActivos').innerText = `${filtrados.length} de ${activos.length}`;
     const contenedor = document.getElementById('listaHistorial');
 
-    if (activos.length === 0) {
-      contenedor.innerHTML = '<p style="color: var(--text-muted); font-size: 0.88rem;">Aún no hay bienes registrados.</p>';
+    if (filtrados.length === 0) {
+      contenedor.innerHTML = '<p style="color: var(--text-muted); font-size: 0.88rem;">No hay bienes registrados con este filtro.</p>';
       return;
     }
 
-    contenedor.innerHTML = activos.map(a => `
+    contenedor.innerHTML = filtrados.map(a => `
       <div class="history-item">
-        ${a.foto ? `<img src="${a.foto}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#666;">Sin foto</div>`}
+        ${a.foto && a.foto.startsWith('data:image') ? `<img src="${a.foto}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#666;">Sin foto</div>`}
         <div class="history-info">
           <span class="tag-pill">${a.codigoAF}</span> <span class="cat-pill">${a.categoriaBien || 'EQUIPO'}</span><br>
           <strong>#${a.item} - ${a.nombre}</strong><br>
           <span>Ref: <b>${a.numSerie}</b> | ${a.marcaModelo}</span><br>
           <span>${a.unidad} · <b>${a.area}</b></span> · <span class="badge ${a.condicion}">${a.condicion}</span>
         </div>
-        <button class="btn-del" onclick="eliminarActivo(${a.id})">✕</button>
+        <button class="btn-del" onclick="eliminarActivo('${a.id}')">✕</button>
       </div>
     `).join('');
   }
 
-  function exportarCSV() {
+  function exportarExcel() {
     if (activos.length === 0) {
       alert("No hay datos para exportar.");
       return;
     }
 
-    const cabeceras = ["Item", "Codigo_FOSSO", "Campana", "Tipo_Bien", "Sede_Unidad", "Area", "Descripcion", "Marca_Modelo_Material", "Serie_Medidas", "Estado", "Fecha_Registro", "Observaciones"];
-    const filas = activos.map(a => [
-      a.item, a.codigoAF, a.campanaInv, a.categoriaBien || "EQUIPO", a.unidad, a.area,
-      a.nombre, a.marcaModelo, a.numSerie, a.condicion, a.fechaRegistro, a.observacion
-    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(";"));
+    const wb = XLSX.utils.book_new();
 
-    const csvContent = "\uFEFF" + [cabeceras.join(";"), ...filas].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Inventario_FOSSO_${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
+    const mapearFila = (a, idx) => ({
+      "Ítem": idx + 1,
+      "Código FOSSO": a.codigoAF,
+      "Campaña": a.campanaInv,
+      "Tipo de Bien": a.categoriaBien || "EQUIPO / MAQUINARIA",
+      "Sede / Unidad": a.unidad,
+      "Área Operativa": a.area,
+      "Descripción del Bien": a.nombre,
+      "Marca / Modelo / Material": a.marcaModelo,
+      "N° Serie / Medidas": a.numSerie,
+      "Estado Físico": a.condicion,
+      "Fecha Registro": a.fechaRegistro,
+      "Observaciones": a.observacion
+    });
+
+    const datosGenerales = activos.map(mapearFila);
+    const wsGeneral = XLSX.utils.json_to_sheet(datosGenerales);
+    wsGeneral['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(wsGeneral['!ref'])) };
+    wsGeneral['!cols'] = [
+      { wch: 6 }, { wch: 14 }, { wch: 11 }, { wch: 24 }, { wch: 18 },
+      { wch: 36 }, { wch: 32 }, { wch: 22 }, { wch: 18 }, { wch: 13 }, { wch: 13 }, { wch: 28 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsGeneral, "GENERAL (CON FILTROS)");
+
+    const tiposUnicos = [...new Set(activos.map(a => a.categoriaBien || "EQUIPO / MAQUINARIA"))];
+    tiposUnicos.forEach(tipo => {
+      const sub = activos.filter(a => (a.categoriaBien || "EQUIPO / MAQUINARIA") === tipo).map(mapearFila);
+      const wsTipo = XLSX.utils.json_to_sheet(sub);
+      wsTipo['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(wsTipo['!ref'])) };
+      const nombreHoja = ("TIPO - " + tipo.replace(/[\\\/\?\*\[\]]/g, '')).substring(0, 31);
+      XLSX.utils.book_append_sheet(wb, wsTipo, nombreHoja);
+    });
+
+    const areasUnicas = [...new Set(activos.map(a => a.area))];
+    areasUnicas.forEach(area => {
+      const sub = activos.filter(a => a.area === area).map(mapearFila);
+      const wsArea = XLSX.utils.json_to_sheet(sub);
+      wsArea['!autofilter'] = { ref: XLSX.utils.encode_range(XLSX.utils.decode_range(wsArea['!ref'])) };
+      const nombreHoja = ("AREA - " + area.replace(/[\\\/\?\*\[\]]/g, '')).substring(0, 31);
+      XLSX.utils.book_append_sheet(wb, wsArea, nombreHoja);
+    });
+
+    XLSX.writeFile(wb, `Inventario_Fisico_FOSSO_${new Date().toISOString().slice(0,10)}.xlsx`);
   }
 
   function generarPDF() {
-    if (activos.length === 0) {
-      alert("No hay bienes inventariados para exportar.");
+    const listaExportar = obtenerFiltrados();
+    if (listaExportar.length === 0) {
+      alert("No hay bienes inventariados para exportar en esta vista.");
       return;
     }
 
@@ -633,8 +765,8 @@
     doc.setFont("helvetica", "normal");
     doc.text(`Fecha: ${new Date().toLocaleDateString('es-PE')}`, 165, 15);
 
-    const filas = activos.map(a => [
-      a.item,
+    const filas = listaExportar.map((a, idx) => [
+      idx + 1,
       `${a.codigoAF}\n(${a.campanaInv})\n[${a.categoriaBien || 'EQUIPO'}]`,
       `${a.nombre}\nMarca/Mat: ${a.marcaModelo}\nSerie/Med: ${a.numSerie}`,
       `${a.unidad}\nÁrea: ${a.area}\nEstado: ${a.condicion}`,
@@ -659,7 +791,7 @@
       },
       didDrawCell: function(data) {
         if (data.section === 'body' && data.column.index === 5) {
-          const a = activos[data.row.index];
+          const a = listaExportar[data.row.index];
           if (a && a.foto && a.foto.startsWith('data:image')) {
             doc.addImage(a.foto, 'JPEG', data.cell.x + 2, data.cell.y + 2, 34, 26);
           }
@@ -671,7 +803,7 @@
     doc.setTextColor(31, 45, 61);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.text(`Total de bienes inventariados: ${activos.length} unidad(es).`, 14, finalY);
+    doc.text(`Total de bienes inventariados: ${listaExportar.length} unidad(es).`, 14, finalY);
 
     doc.save(`Inventario_Fisico_FOSSO_${new Date().toISOString().slice(0,10)}.pdf`);
   }
