@@ -8,7 +8,6 @@
   <title>FOSSO - Inventario Activos Fijos</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-  <!-- ExcelJS: Permite incrustar fotografías reales dentro de las celdas de Excel (.xlsx) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
@@ -463,16 +462,13 @@
   let activos = [];
   let fotosLocalesIDB = {};
   let fotoBase64Actual = "";
-  let editandoId = null; // Controla si estamos creando nuevo o editando uno existente
+  let editandoId = null;
   let scannerActivo = false;
   let lecturasConfirmadas = {};
   let sincronizando = false;
   let subiendoAhora = false;
   let limiteVisible = 25;
 
-  // =========================================================================
-  // ALMACÉN INDEXEDDB PARA FOTOS (HASTA 1 GB EN IPHONE SIN LLENAR MEMORIA)
-  // =========================================================================
   function abrirDBFotos() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open("FossoFotosDB", 1);
@@ -485,7 +481,7 @@
   }
 
   async function guardarFotoIDB(id, base64) {
-    if (!base64) return;
+    if (!base64 || !base64.startsWith("data:image")) return;
     fotosLocalesIDB[String(id)] = base64;
     try {
       const db = await abrirDBFotos();
@@ -517,7 +513,7 @@
 
   function guardarCacheLigera() {
     try {
-      const sinFotos = activos.map(({ foto, ...resto }) => resto);
+      const sinFotos = activos.map(({ foto, fotoBase64, ...resto }) => resto);
       localStorage.setItem('fosso_activos_ligero', JSON.stringify(sinFotos));
     } catch (e) {}
   }
@@ -537,6 +533,12 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
       if (Array.isArray(data)) {
+        // Guardar en IndexedDB las fotos antiguas (Base64) que vengan de Sheets
+        for (const item of data) {
+          if (item.fotoBase64 && item.fotoBase64.startsWith("data:image")) {
+            guardarFotoIDB(item.id, item.fotoBase64);
+          }
+        }
         const idsNube = new Set(data.map(d => String(d.id)));
         const pendientes = activos.filter(a => !idsNube.has(String(a.id)) && (Date.now() - Number(a.id) < 30000));
         activos = [...data, ...pendientes].map((item, idx) => ({ ...item, item: idx + 1 }));
@@ -553,10 +555,14 @@
     }
   }
 
-  // Obtiene la foto en Base64 de un registro (ya sea local en IndexedDB o descargándola desde su enlace de Drive)
   async function obtenerBase64DeActivo(a) {
     const local = fotosLocalesIDB[String(a.id)];
     if (local && local.startsWith("data:image")) return local;
+
+    if (a.fotoBase64 && a.fotoBase64.startsWith("data:image")) {
+      guardarFotoIDB(a.id, a.fotoBase64);
+      return a.fotoBase64;
+    }
 
     if (a.fotoUrl && a.fotoUrl.startsWith("http")) {
       try {
@@ -578,7 +584,7 @@
   }
 
   function verificarHistorialLocal(valor) {
-    if (editandoId) return; // No interferir si estamos editando
+    if (editandoId) return;
     const limpio = valor.toUpperCase().replace(/AF\s*-\s*/g, '').trim();
     const msg = document.getElementById('lookupMsg');
     if (!limpio) {
@@ -598,16 +604,12 @@
     }
   }
 
-  // =========================================================================
-  // MODO EDICIÓN Y RETORNO A NUEVO REGISTRO
-  // =========================================================================
   async function cargarParaEditar(id) {
     const item = activos.find(a => String(a.id) === String(id));
     if (!item) return;
 
     editandoId = item.id;
 
-    // Mostrar controles visuales de modo edición
     document.getElementById('formCard').classList.add('editing-mode');
     document.getElementById('formTitle').innerText = `Editando Activo #${item.item}`;
     document.getElementById('btnNuevoRegistro').style.display = 'inline-block';
@@ -618,7 +620,6 @@
     btnGuardar.innerText = "💾 Guardar Cambios";
     btnGuardar.classList.add('update-mode');
 
-    // Rellenar campos con los datos actuales
     document.getElementById('itemNum').value = item.item;
     const rawNum = item.codigoAF === "SIN CÓDIGO AF" ? "" : String(item.codigoAF).replace(/AF\s*-\s*/gi, '').trim();
     document.getElementById('numAF').value = rawNum;
@@ -633,7 +634,6 @@
     document.getElementById('observacion').value = item.observacion === "Sin observaciones" ? "" : item.observacion;
     document.getElementById('lookupMsg').style.display = "none";
 
-    // Mostrar foto existente si tiene
     fotoBase64Actual = "";
     const fotoExistente = await obtenerBase64DeActivo(item);
     const preview = document.getElementById('previewImg');
@@ -649,7 +649,6 @@
       btnFoto.innerText = "📷 Tomar Foto del Bien / Etiqueta";
     }
 
-    // Subir suavemente al formulario
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -824,7 +823,6 @@
 
     const codigoAF = rawAF ? `AF - ${rawAF}` : "SIN CÓDIGO AF";
 
-    // Si es nuevo registro, validar duplicados
     if (!editandoId && rawAF && activos.some(a => a.codigoAF === codigoAF)) {
       if (!confirm(`El código ${codigoAF} ya fue registrado en el historial compartido. ¿Deseas guardarlo de todas formas?`)) return;
     }
@@ -836,7 +834,6 @@
 
     try {
       if (editandoId) {
-        // ACTUALIZAR REGISTRO EXISTENTE
         const idx = activos.findIndex(a => String(a.id) === String(editandoId));
         if (idx !== -1) {
           const actualizado = {
@@ -874,7 +871,6 @@
         }
         activarModoNuevo();
       } else {
-        // CREAR NUEVO REGISTRO
         const itemId = Date.now();
         const fotoParaSubir = fotoBase64Actual;
 
@@ -989,8 +985,8 @@
     btnMore.innerText = `⬇️ Ver más (${ordenados.length - limiteVisible} restantes)`;
 
     contenedor.innerHTML = visibles.map(a => {
-      const fotoLocal = fotosLocalesIDB[String(a.id)];
-      const thumbHtml = fotoLocal
+      const fotoLocal = fotosLocalesIDB[String(a.id)] || a.fotoBase64;
+      const thumbHtml = (fotoLocal && fotoLocal.startsWith("data:image"))
         ? `<img src="${fotoLocal}" class="history-thumb">`
         : (a.fotoUrl && a.fotoUrl.startsWith("http")
             ? `<img src="${a.fotoUrl}" class="history-thumb" onerror="this.style.display='none'">`
@@ -1014,9 +1010,6 @@
     }).join('');
   }
 
-  // =========================================================================
-  // EXPORTAR EXCEL (.XLSX) CON FOTOGRAFÍAS INCRUSTADAS Y AUTOFILTROS
-  // =========================================================================
   async function exportarExcel() {
     if (activos.length === 0) {
       alert("No hay datos para exportar.");
@@ -1048,7 +1041,6 @@
           { header: 'Evidencia Fotográfica', key: 'foto', width: 20 }
         ];
 
-        // Estilo de cabecera azul FOSSO y Autofiltro
         const headerRow = sheet.getRow(1);
         headerRow.height = 24;
         headerRow.eachCell(cell => {
@@ -1095,17 +1087,14 @@
         }
       }
 
-      // 1. Hoja general con todos los bienes y fotos
       await crearHojaConFotos("GENERAL (CON FILTROS)", activos);
 
-      // 2. Hojas por Tipo de Bien
       const tiposUnicos = [...new Set(activos.map(a => a.categoriaBien || "EQUIPO / MAQUINARIA"))];
       for (const tipo of tiposUnicos) {
         const sub = activos.filter(a => (a.categoriaBien || "EQUIPO / MAQUINARIA") === tipo);
         await crearHojaConFotos("TIPO - " + tipo.replace(/[\\\/\?\*\[\]]/g, ''), sub);
       }
 
-      // 3. Hojas por Área
       const areasUnicas = [...new Set(activos.map(a => a.area))];
       for (const area of areasUnicas) {
         const sub = activos.filter(a => a.area === area);
@@ -1127,9 +1116,6 @@
     }
   }
 
-  // =========================================================================
-  // EXPORTAR PDF CON FOTOGRAFÍAS INCRUSTADAS
-  // =========================================================================
   async function generarPDF() {
     const listaExportar = obtenerFiltrados();
     if (listaExportar.length === 0) {
@@ -1146,7 +1132,6 @@
     btnPdf.innerText = "⏳...";
 
     try {
-      // Precargar todas las fotos (locales + Drive) de la lista antes de dibujar el PDF
       const fotosResueltas = {};
       for (const a of listaExportar) {
         fotosResueltas[String(a.id)] = await obtenerBase64DeActivo(a);
