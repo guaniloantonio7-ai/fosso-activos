@@ -8,7 +8,6 @@
   <title>FOSSO - Inventario Activos Fijos</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-  <!-- Quagga2: Motor especializado en códigos de barras industriales (Code 128, Code 39, Code 93) -->
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
   <style>
     :root {
@@ -68,7 +67,7 @@
       margin: 0 0 14px 0;
     }
 
-    .row-3 { display: grid; grid-template-columns: 58px 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .row-item-estado { display: grid; grid-template-columns: 65px 1fr; gap: 10px; margin-bottom: 12px; }
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 
     label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; color: var(--text-main); }
@@ -96,20 +95,20 @@
     .af-prefix {
       background: var(--primary-dark);
       color: white;
-      padding: 10px 12px;
+      padding: 10px 11px;
       border-radius: 8px;
       font-weight: 700;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       white-space: nowrap;
     }
     .btn-scan {
       background: #0e7490;
       color: white;
       border: none;
-      padding: 10px 12px;
+      padding: 10px 11px;
       border-radius: 8px;
       font-weight: 700;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       cursor: pointer;
       white-space: nowrap;
     }
@@ -123,12 +122,11 @@
       display: none;
     }
 
-    /* Visor Quagga2 recortado solo a la franja central */
     #scannerContainer {
       display: none;
       position: relative;
       width: 100%;
-      height: 170px;
+      height: 180px;
       margin-top: 10px;
       border-radius: 8px;
       overflow: hidden;
@@ -136,7 +134,7 @@
     }
     #scannerContainer video, #scannerContainer canvas {
       width: 100% !important;
-      height: 170px !important;
+      height: 180px !important;
       object-fit: cover;
       position: absolute;
       top: 0;
@@ -145,25 +143,14 @@
     .scan-box-target {
       position: absolute;
       top: 25%;
-      left: 15%;
-      width: 70%;
+      left: 12%;
+      width: 76%;
       height: 50%;
       border: 2px solid #00ff66;
       border-radius: 6px;
       box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
       pointer-events: none;
       z-index: 10;
-    }
-    .scan-guide {
-      position: absolute;
-      top: 50%;
-      left: 18%;
-      right: 18%;
-      height: 2px;
-      background: #ff2e2e;
-      box-shadow: 0 0 8px #ff2e2e;
-      z-index: 11;
-      pointer-events: none;
     }
     .scan-hint {
       position: absolute;
@@ -222,15 +209,23 @@
     }
     .history-item:last-child { border-bottom: none; }
     .history-thumb { width: 62px; height: 62px; border-radius: 8px; object-fit: cover; background: #e2e8f0; flex-shrink: 0; }
-    .history-info { flex: 1; font-size: 0.84rem; line-height: 1.35; }
-    .tag-pill { background: #163a5f; color: #fff; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.75rem; }
+    .history-info { flex: 1; font-size: 0.84rem; line-height: 1.38; }
+    .tag-pill { background: #163a5f; color: #fff; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.74rem; }
+    .cat-pill { background: #e1ecf4; color: #163a5f; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; color: white; }
     .badge.BUENO { background: #229954; }
     .badge.REGULAR { background: #d68910; }
     .badge.MALO { background: #c0392b; }
 
     .btn-del { background: #fadbd8; color: #c0392b; border: none; padding: 6px 10px; border-radius: 6px; font-weight: 700; cursor: pointer; }
-    footer { text-align: center; font-size: 0.82rem; color: var(--text-muted); margin-top: 18px; }
+    footer {
+      text-align: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-top: 20px;
+      padding: 0 14px;
+    }
   </style>
 </head>
 <body>
@@ -247,52 +242,55 @@
 </header>
 
 <div class="card">
-  <h2 class="card-title">Registro de Equipo FOSSO</h2>
+  <h2 class="card-title">Registro de Activo FOSSO</h2>
 
   <div class="tag-box">
-    <label class="accent-blue">1. Código de Barras FOSSO</label>
+    <label class="accent-blue">1. Código de Barras FOSSO (Opcional si no tiene)</label>
     <div class="af-input-group">
       <span class="af-prefix">AF -</span>
       <input type="text" id="numAF" inputmode="numeric" placeholder="0537" oninput="verificarHistorialLocal(this.value)">
-      <button type="button" class="btn-scan" id="btnScan" onclick="toggleScanner()">📷 Escanear</button>
+      <button type="button" class="btn-scan" id="btnScan" onclick="toggleScanner()">📷 Vivo</button>
+      <button type="button" class="btn-scan" style="background:#1d446b;" onclick="document.getElementById('scanPhotoInput').click()">🖼️ Foto</button>
     </div>
+    <input type="file" id="scanPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="escanearDesdeFoto(event)">
     <div id="lookupMsg" class="status-lookup"></div>
 
     <div id="scannerContainer">
       <div class="scan-box-target"></div>
-      <div class="scan-guide"></div>
-      <div class="scan-hint">Encuadra SOLO las barras dentro del recuadro verde</div>
+      <div class="scan-hint">Mantén el celular a 25 cm (Zoom 2x activo)</div>
     </div>
 
-    <div style="margin-top: 10px;">
-      <label>Campaña Etiqueta</label>
-      <select id="campanaInv">
-        <option value="INV 2026">INV 2026</option>
-        <option value="INV 2025">INV 2025</option>
-        <option value="INV 2023">INV 2023</option>
-        <option value="SIN ETIQUETA">SIN ETIQUETA</option>
-      </select>
+    <div class="row-2" style="margin-top: 10px; margin-bottom: 0;">
+      <div>
+        <label>Campaña Etiqueta</label>
+        <select id="campanaInv">
+          <option value="INV 2026">INV 2026</option>
+          <option value="INV 2025">INV 2025</option>
+          <option value="INV 2023">INV 2023</option>
+          <option value="SIN ETIQUETA">SIN ETIQUETA</option>
+        </select>
+      </div>
+      <div>
+        <label>Etiqueta / Tipo de Bien</label>
+        <select id="categoriaBien">
+          <option value="EQUIPO / MAQUINARIA">EQUIPO / MAQUINARIA</option>
+          <option value="MOBILIARIO">MOBILIARIO (ESCRITORIO, SILLA, MESA)</option>
+          <option value="ESTANTERÍA / RACKS">ESTANTERÍA / RACKS</option>
+          <option value="MENAJE / VAJILLA">MENAJE / VAJILLA</option>
+          <option value="CÓMPUTO / ELECTRÓNICA">CÓMPUTO / ELECTRÓNICA</option>
+          <option value="OTROS BIENES">OTROS BIENES</option>
+        </select>
+      </div>
     </div>
   </div>
 
-  <div class="row-3">
+  <div class="row-item-estado">
     <div>
       <label>Ítem</label>
       <input type="number" id="itemNum" value="1" readonly>
     </div>
     <div>
-      <label>Área</label>
-      <select id="area">
-        <option value="COCINA">COCINA</option>
-        <option value="COMEDOR">COMEDOR</option>
-        <option value="ALMACÉN">ALMACÉN</option>
-        <option value="CÁMARA FRÍA">CÁMARA FRÍA</option>
-        <option value="PANADERÍA">PANADERÍA</option>
-        <option value="OFICINA">OFICINA</option>
-      </select>
-    </div>
-    <div>
-      <label>Estado</label>
+      <label>Estado Físico</label>
       <select id="condicion">
         <option value="BUENO">BUENO</option>
         <option value="REGULAR">REGULAR</option>
@@ -302,47 +300,59 @@
   </div>
 
   <div style="margin-bottom: 12px;">
+    <label class="accent-blue">Área Operativa</label>
+    <select id="area">
+      <option value="COMEDOR">COMEDOR</option>
+      <option value="VAJILLA">VAJILLA</option>
+      <option value="COCINA">COCINA</option>
+      <option value="ALMACÉN DE ABARROTES">ALMACÉN DE ABARROTES</option>
+      <option value="REEFER DE VERDURAS, TUBÉRCULOS Y FRUTAS">REEFER DE VERDURAS, TUBÉRCULOS Y FRUTAS</option>
+      <option value="REEFER DE PRE ELABORADOS">REEFER DE PRE ELABORADOS</option>
+    </select>
+  </div>
+
+  <div style="margin-bottom: 12px;">
     <label class="accent-blue">Sede / Operación / Unidad</label>
     <input type="text" id="unidad" placeholder="Ej. Agrolmos, UniFrutti, Oficina Trujillo...">
   </div>
 
   <div style="margin-bottom: 12px;">
-    <label class="accent-blue">Descripción del Equipo / Máquina</label>
-    <input type="text" id="nombreEquipo" placeholder="Ej. Mesa de trabajo acero inox, Congeladora...">
+    <label class="accent-blue">Descripción del Objeto / Equipo</label>
+    <input type="text" id="nombreEquipo" placeholder="Ej. Estante metálico 5 niveles, Escritorio melamina, Cocina...">
   </div>
 
   <div class="row-2">
     <div>
-      <label>Marca / Modelo</label>
-      <input type="text" id="marcaModelo" placeholder="Ej. Coldex / CH-400">
+      <label>Marca / Modelo / Material</label>
+      <input type="text" id="marcaModelo" placeholder="Ej. Coldex / Acero Inox / Melamina">
     </div>
     <div>
-      <label>N° Serie Fábrica</label>
-      <input type="text" id="numSerie" placeholder="Ej. SN-884210">
+      <label>N° Serie / Medidas</label>
+      <input type="text" id="numSerie" placeholder="Ej. SN-884210 o 1.80x0.50m">
     </div>
   </div>
 
   <input type="file" id="fotoInput" accept="image/*" style="display:none" onchange="procesarFoto(event)">
   <button type="button" class="btn-photo" id="btnFoto" onclick="document.getElementById('fotoInput').click()">
-    📷 Tomar Foto (Equipo + Etiqueta AF)
+    📷 Tomar Foto del Bien / Etiqueta
   </button>
   <img id="previewImg" class="preview-img" alt="Vista previa del activo">
 
   <div style="margin-bottom: 12px;">
     <label>Observaciones</label>
-    <textarea id="observacion" placeholder="Detalles del estado físico, placa legible, etc..."></textarea>
+    <textarea id="observacion" placeholder="Detalles del estado físico, cantidad de niveles, placa legible, etc..."></textarea>
   </div>
 
-  <button type="button" class="btn-save" onclick="guardarActivo()">💾 Guardar Activo FOSSO</button>
+  <button type="button" class="btn-save" onclick="guardarActivo()">💾 Guardar en Inventario FOSSO</button>
 </div>
 
 <div class="card">
-  <h2 class="card-title" style="margin-bottom: 6px;">Activos Inventariados (<span id="contadorActivos">0</span>)</h2>
+  <h2 class="card-title" style="margin-bottom: 6px;">Bienes Inventariados (<span id="contadorActivos">0</span>)</h2>
   <div id="listaHistorial"></div>
 </div>
 
 <footer>
-  Desarrollado por: Ing. Antonio Guanilo Gonzales
+  DESARROLLADO POR ING ANTONIO GUANILO GONZALES
 </footer>
 
 <script>
@@ -373,7 +383,6 @@
     }
   }
 
-  // Motor Quagga2 calibrado para Code 128 / Code 39 / Code 93 de etiquetas FOSSO
   function toggleScanner() {
     const container = document.getElementById('scannerContainer');
     const btn = document.getElementById('btnScan');
@@ -384,7 +393,7 @@
     }
 
     container.style.display = 'block';
-    btn.innerText = '✖ Cerrar';
+    btn.innerText = '✖';
     btn.classList.add('active');
     scannerActivo = true;
     lecturasConfirmadas = {};
@@ -396,46 +405,40 @@
         target: container,
         constraints: {
           facingMode: "environment",
-          width: { min: 640, ideal: 1280 },
-          height: { min: 480, ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         },
-        // Recorta la lectura solo al recuadro verde central para ignorar textos laterales de la etiqueta
-        area: {
-          top: "25%",
-          right: "15%",
-          left: "15%",
-          bottom: "25%"
-        }
+        area: { top: "25%", right: "12%", left: "12%", bottom: "25%" }
       },
-      locator: {
-        patchSize: "medium",
-        halfSample: false
-      },
+      locator: { patchSize: "large", halfSample: false },
       numOfWorkers: 0,
       frequency: 15,
       decoder: {
-        readers: [
-          "code_128_reader",
-          "code_39_reader",
-          "code_93_reader",
-          "codabar_reader"
-        ]
+        readers: ["code_128_reader", "code_39_reader", "i2of5_reader", "code_93_reader"]
       },
       locate: true
     }, function(err) {
       if (err) {
-        alert("Error al iniciar escáner: " + err);
+        alert("Error cámara: " + err);
         detenerScanner();
         return;
       }
       Quagga.start();
+
+      setTimeout(() => {
+        const track = Quagga.CameraAccess.getActiveTrack();
+        if (track && track.getCapabilities) {
+          const caps = track.getCapabilities();
+          if (caps.zoom) {
+            track.applyConstraints({ advanced: [{ zoom: Math.min(2.2, caps.zoom.max) }] }).catch(() => {});
+          }
+        }
+      }, 500);
     });
 
     Quagga.onDetected(function(data) {
       if (!data || !data.codeResult || !data.codeResult.code) return;
       const raw = data.codeResult.code.trim();
-
-      // Filtro de confianza: exige leer el mismo código 2 veces seguidas para evitar falsos positivos
       lecturasConfirmadas[raw] = (lecturasConfirmadas[raw] || 0) + 1;
       if (lecturasConfirmadas[raw] >= 2) {
         const limpio = raw.toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/^AF/, '');
@@ -447,14 +450,34 @@
     });
   }
 
+  function escanearDesdeFoto(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+
+    Quagga.decodeSingle({
+      src: url,
+      numOfWorkers: 0,
+      inputStream: { size: 1280 },
+      decoder: {
+        readers: ["code_128_reader", "code_39_reader", "i2of5_reader", "code_93_reader"]
+      }
+    }, function(result) {
+      if (result && result.codeResult) {
+        const limpio = result.codeResult.code.toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/^AF/, '');
+        document.getElementById('numAF').value = limpio;
+        verificarHistorialLocal(limpio);
+      } else {
+        alert("No se detectó el código de barras en la foto. Puedes digitar los 4 dígitos manualmente.");
+      }
+    });
+  }
+
   function detenerScanner() {
-    try {
-      Quagga.offDetected();
-      Quagga.stop();
-    } catch (e) {}
+    try { Quagga.offDetected(); Quagga.stop(); } catch (e) {}
     document.getElementById('scannerContainer').style.display = 'none';
     const btn = document.getElementById('btnScan');
-    btn.innerText = '📷 Escanear';
+    btn.innerText = '📷 Vivo';
     btn.classList.remove('active');
     scannerActivo = false;
   }
@@ -468,7 +491,7 @@
       const img = new Image();
       img.onload = function() {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 700;
+        const MAX_WIDTH = 650;
         const scale = MAX_WIDTH / img.width;
         canvas.width = MAX_WIDTH;
         canvas.height = img.height * scale;
@@ -495,7 +518,7 @@
     const nombre = document.getElementById('nombreEquipo').value.trim();
 
     if (!nombre) {
-      alert("Ingresa la descripción del equipo o máquina.");
+      alert("Ingresa la descripción del objeto o equipo.");
       return;
     }
 
@@ -510,6 +533,7 @@
       item: activos.length + 1,
       codigoAF: codigoAF,
       campanaInv: document.getElementById('campanaInv').value,
+      categoriaBien: document.getElementById('categoriaBien').value,
       unidad: document.getElementById('unidad').value.trim() || "No especificada",
       area: document.getElementById('area').value,
       condicion: document.getElementById('condicion').value,
@@ -533,13 +557,13 @@
     document.getElementById('previewImg').style.display = 'none';
     const btn = document.getElementById('btnFoto');
     btn.classList.remove('has-photo');
-    btn.innerText = "📷 Tomar Foto (Equipo + Etiqueta AF)";
+    btn.innerText = "📷 Tomar Foto del Bien / Etiqueta";
 
     actualizarUI();
   }
 
   function eliminarActivo(id) {
-    if (!confirm("¿Eliminar este equipo del inventario?")) return;
+    if (!confirm("¿Eliminar este registro del inventario?")) return;
     activos = activos.filter(a => a.id !== id).map((a, idx) => ({ ...a, item: idx + 1 }));
     localStorage.setItem('fosso_activos_af', JSON.stringify(activos));
     actualizarUI();
@@ -551,7 +575,7 @@
     const contenedor = document.getElementById('listaHistorial');
 
     if (activos.length === 0) {
-      contenedor.innerHTML = '<p style="color: var(--text-muted); font-size: 0.88rem;">Aún no hay equipos registrados.</p>';
+      contenedor.innerHTML = '<p style="color: var(--text-muted); font-size: 0.88rem;">Aún no hay bienes registrados.</p>';
       return;
     }
 
@@ -559,10 +583,10 @@
       <div class="history-item">
         ${a.foto ? `<img src="${a.foto}" class="history-thumb">` : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#666;">Sin foto</div>`}
         <div class="history-info">
-          <span class="tag-pill">${a.codigoAF}</span> <small style="color:#163a5f;font-weight:700;">(${a.campanaInv})</small><br>
+          <span class="tag-pill">${a.codigoAF}</span> <span class="cat-pill">${a.categoriaBien || 'EQUIPO'}</span><br>
           <strong>#${a.item} - ${a.nombre}</strong><br>
-          <span>Serie: <b>${a.numSerie}</b> | ${a.marcaModelo}</span><br>
-          <span>${a.unidad} · ${a.area}</span> · <span class="badge ${a.condicion}">${a.condicion}</span>
+          <span>Ref: <b>${a.numSerie}</b> | ${a.marcaModelo}</span><br>
+          <span>${a.unidad} · <b>${a.area}</b></span> · <span class="badge ${a.condicion}">${a.condicion}</span>
         </div>
         <button class="btn-del" onclick="eliminarActivo(${a.id})">✕</button>
       </div>
@@ -575,9 +599,9 @@
       return;
     }
 
-    const cabeceras = ["Item", "Codigo_FOSSO", "Campana", "Sede_Unidad", "Area", "Descripcion_Equipo", "Marca_Modelo", "Numero_Serie", "Estado", "Fecha_Registro", "Observaciones"];
+    const cabeceras = ["Item", "Codigo_FOSSO", "Campana", "Tipo_Bien", "Sede_Unidad", "Area", "Descripcion", "Marca_Modelo_Material", "Serie_Medidas", "Estado", "Fecha_Registro", "Observaciones"];
     const filas = activos.map(a => [
-      a.item, a.codigoAF, a.campanaInv, a.unidad, a.area,
+      a.item, a.codigoAF, a.campanaInv, a.categoriaBien || "EQUIPO", a.unidad, a.area,
       a.nombre, a.marcaModelo, a.numSerie, a.condicion, a.fechaRegistro, a.observacion
     ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(";"));
 
@@ -586,13 +610,13 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Base_Activos_FOSSO_${new Date().toISOString().slice(0,10)}.csv`;
+    link.download = `Inventario_FOSSO_${new Date().toISOString().slice(0,10)}.csv`;
     link.click();
   }
 
   function generarPDF() {
     if (activos.length === 0) {
-      alert("No hay equipos inventariados para exportar.");
+      alert("No hay bienes inventariados para exportar.");
       return;
     }
 
@@ -611,8 +635,8 @@
 
     const filas = activos.map(a => [
       a.item,
-      `${a.codigoAF}\n(${a.campanaInv})`,
-      `${a.nombre}\nMarca/Mod: ${a.marcaModelo}\nSerie: ${a.numSerie}`,
+      `${a.codigoAF}\n(${a.campanaInv})\n[${a.categoriaBien || 'EQUIPO'}]`,
+      `${a.nombre}\nMarca/Mat: ${a.marcaModelo}\nSerie/Med: ${a.numSerie}`,
       `${a.unidad}\nÁrea: ${a.area}\nEstado: ${a.condicion}`,
       `${a.observacion}`,
       ""
@@ -620,23 +644,23 @@
 
     doc.autoTable({
       startY: 30,
-      head: [['Ítem', 'Cód. FOSSO', 'Descripción / Serie', 'Ubicación / Estado', 'Observaciones', 'Evidencia']],
+      head: [['Ítem', 'Cód. / Categoría', 'Descripción / Detalle', 'Ubicación / Estado', 'Observaciones', 'Evidencia']],
       body: filas,
       theme: 'grid',
       headStyles: { fillColor: [22, 58, 95], textColor: 255, fontSize: 8, halign: 'center' },
-      styles: { fontSize: 7.8, cellPadding: 2.5, valign: 'middle' },
+      styles: { fontSize: 7.5, cellPadding: 2.5, valign: 'middle' },
       columnStyles: {
         0: { cellWidth: 9, halign: 'center' },
-        1: { cellWidth: 27, halign: 'center', fontStyle: 'bold' },
-        2: { cellWidth: 44 },
-        3: { cellWidth: 32 },
-        4: { cellWidth: 32 },
+        1: { cellWidth: 30, halign: 'center', fontStyle: 'bold' },
+        2: { cellWidth: 42 },
+        3: { cellWidth: 35 },
+        4: { cellWidth: 28 },
         5: { cellWidth: 38, minCellHeight: 30 }
       },
       didDrawCell: function(data) {
         if (data.section === 'body' && data.column.index === 5) {
           const a = activos[data.row.index];
-          if (a && a.foto) {
+          if (a && a.foto && a.foto.startsWith('data:image')) {
             doc.addImage(a.foto, 'JPEG', data.cell.x + 2, data.cell.y + 2, 34, 26);
           }
         }
@@ -647,7 +671,7 @@
     doc.setTextColor(31, 45, 61);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.text(`Total de activos inventariados: ${activos.length} unidad(es).`, 14, finalY);
+    doc.text(`Total de bienes inventariados: ${activos.length} unidad(es).`, 14, finalY);
 
     doc.save(`Inventario_Fisico_FOSSO_${new Date().toISOString().slice(0,10)}.pdf`);
   }
