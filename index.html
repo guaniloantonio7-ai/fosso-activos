@@ -289,7 +289,6 @@
       cursor: pointer;
     }
 
-    /* Visor ampliado al tocar cualquier miniatura */
     #photoModal {
       display: none;
       position: fixed;
@@ -491,7 +490,6 @@
   <button type="button" id="btnVerMas" class="btn-more" style="display:none;" onclick="verMasItems()">⬇️ Mostrar 25 registros anteriores</button>
 </div>
 
-<!-- Modal para ver la foto en alta calidad al tocar la miniatura -->
 <div id="photoModal" onclick="this.style.display='none'">
   <img id="modalImg" src="" alt="Foto ampliada">
   <button type="button">Cerrar vista previa</button>
@@ -505,11 +503,11 @@
   const API_URL = "https://script.google.com/macros/s/AKfycbz4FhZfK13GEGwj80VRm0M3D0tV8LBtili77zeECOWeO9fNDH6zC9F3VOycB2PDAwI/exec";
 
   let activos = [];
-  let fotosHDLocales = {};    // Fotos nítidas (800px) guardadas en IndexedDB para PDF/Excel/Vista Previa
-  let fotosNubeCache = {};    // Fotos descargadas de Sheets para mostrar en tarjetas
+  let fotosHDLocales = {};
+  let fotosNubeCache = {};
   let descargasEnCurso = new Set();
-  let fotoHDActual = "";      // Foto nítida recién tomada (800px)
-  let fotoLigeraActual = "";  // Copia ligera para subir rápido a Sheets (360px)
+  let fotoHDActual = "";
+  let fotoLigeraActual = "";
   let editandoId = null;
   let scannerActivo = false;
   let lecturasConfirmadas = {};
@@ -539,6 +537,7 @@
     } catch (e) {}
   }
 
+  // Carga las fotos de la base HD actual Y recupera automáticamente las de la base anterior (FossoFotosDB)
   async function cargarFotosIDB() {
     try {
       const db = await abrirDBFotos();
@@ -549,6 +548,24 @@
           fotosHDLocales[String(r.id)] = r.base64;
         });
         actualizarUI();
+      };
+    } catch (e) {}
+
+    try {
+      const reqOld = indexedDB.open("FossoFotosDB", 1);
+      reqOld.onsuccess = e => {
+        const dbOld = e.target.result;
+        if (!dbOld.objectStoreNames.contains("fotos")) return;
+        const txOld = dbOld.transaction("fotos", "readonly");
+        const getOld = txOld.objectStore("fotos").getAll();
+        getOld.onsuccess = () => {
+          (getOld.result || []).forEach(r => {
+            if (!fotosHDLocales[String(r.id)] && r.base64) {
+              guardarFotoIDB(r.id, r.base64);
+            }
+          });
+          actualizarUI();
+        };
       };
     } catch (e) {}
   }
@@ -572,7 +589,6 @@
   sincronizarNube(false);
   setInterval(() => sincronizarNube(false), 25000);
 
-  // Descarga en lotes de 4 las fotos faltantes de los registros visibles para que se vean al instante
   async function hidratarFotosVisibles(listaVisibles) {
     const pendientes = listaVisibles.filter(a => {
       const idStr = String(a.id);
@@ -599,7 +615,6 @@
     }
     if (huboNuevas) {
       actualizarUI();
-      // Si aún quedan más fotos visibles sin descargar, continuar el siguiente lote
       if (pendientes.length > 6) setTimeout(() => hidratarFotosVisibles(listaVisibles), 300);
     }
   }
@@ -639,7 +654,6 @@
     }
   }
 
-  // Prioriza siempre la versión HD (800px) para PDF, Excel y vista previa
   async function obtenerMejorFotoDeActivo(a) {
     const idStr = String(a.id);
     if (fotosHDLocales[idStr] && fotosHDLocales[idStr].startsWith("data:image")) {
@@ -876,7 +890,6 @@
     scannerActivo = false;
   }
 
-  // Genera 2 versiones de la foto: HD (800px) para PDF/Excel/Vista previa y Ligera (380px) para la nube
   function procesarFoto(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -885,7 +898,7 @@
     reader.onload = function(e) {
       const img = new Image();
       img.onload = function() {
-        // 1. Versión Alta Definición (800px, calidad 0.82) para reportes nítidos
+        // 1. Versión Alta Definición (800px) para PDF/Excel/Vista Previa
         const canvasHD = document.createElement('canvas');
         const MAX_HD = 800;
         const scaleHD = Math.min(1, MAX_HD / img.width);
@@ -894,7 +907,7 @@
         canvasHD.getContext('2d').drawImage(img, 0, 0, canvasHD.width, canvasHD.height);
         fotoHDActual = canvasHD.toDataURL('image/jpeg', 0.82);
 
-        // 2. Versión Sincronización Nube (380px, calidad 0.65) para Google Sheets (~18 KB, cabe en 1 celda)
+        // 2. Versión Sincronización Nube (380px) para Google Sheets
         const canvasCloud = document.createElement('canvas');
         const MAX_CLOUD = 380;
         const scaleCloud = Math.min(1, MAX_CLOUD / img.width);
