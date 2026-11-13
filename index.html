@@ -467,6 +467,7 @@
   let lecturasConfirmadas = {};
   let sincronizando = false;
   let subiendoAhora = false;
+  let ultimaOperacionLocalTs = 0; // Pausa de seguridad de 15s tras guardar/editar para evitar colisiones
   let limiteVisible = 25;
 
   function abrirDBFotos() {
@@ -524,7 +525,10 @@
   setInterval(() => sincronizarNube(false), 25000);
 
   async function sincronizarNube(manual) {
+    // Si acabamos de guardar o editar hace menos de 15 segundos, esperar para no pisar datos
     if (sincronizando || subiendoAhora) return;
+    if (!manual && (Date.now() - ultimaOperacionLocalTs < 15000)) return;
+
     sincronizando = true;
     const statusEl = document.getElementById('syncStatus');
     if (manual) statusEl.innerText = "● Actualizando...";
@@ -533,14 +537,13 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
       if (Array.isArray(data)) {
-        // Guardar en IndexedDB las fotos antiguas (Base64) que vengan de Sheets
         for (const item of data) {
           if (item.fotoBase64 && item.fotoBase64.startsWith("data:image")) {
             guardarFotoIDB(item.id, item.fotoBase64);
           }
         }
         const idsNube = new Set(data.map(d => String(d.id)));
-        const pendientes = activos.filter(a => !idsNube.has(String(a.id)) && (Date.now() - Number(a.id) < 30000));
+        const pendientes = activos.filter(a => !idsNube.has(String(a.id)) && (Date.now() - Number(a.id) < 45000));
         activos = [...data, ...pendientes].map((item, idx) => ({ ...item, item: idx + 1 }));
         guardarCacheLigera();
         actualizarUI();
@@ -555,6 +558,7 @@
     }
   }
 
+  // Obtiene la foto en Base64 (IndexedDB -> Base64 de Sheets -> Descarga directa por Apps Script sin CORS)
   async function obtenerBase64DeActivo(a) {
     const local = fotosLocalesIDB[String(a.id)];
     if (local && local.startsWith("data:image")) return local;
@@ -564,21 +568,15 @@
       return a.fotoBase64;
     }
 
-    if (a.fotoUrl && a.fotoUrl.startsWith("http")) {
+    if (a.driveFileId) {
       try {
-        const resp = await fetch(a.fotoUrl);
-        const blob = await resp.blob();
-        return await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (reader.result) guardarFotoIDB(a.id, reader.result);
-            resolve(reader.result);
-          };
-          reader.readAsDataURL(blob);
-        });
-      } catch (e) {
-        return null;
-      }
+        const resp = await fetch(`${API_URL}?getFotoId=${a.driveFileId}`);
+        const json = await resp.json();
+        if (json && json.base64 && json.base64.startsWith("data:image")) {
+          guardarFotoIDB(a.id, json.base64);
+          return json.base64;
+        }
+      } catch (e) {}
     }
     return null;
   }
@@ -635,11 +633,17 @@
     document.getElementById('lookupMsg').style.display = "none";
 
     fotoBase64Actual = "";
-    const fotoExistente = await obtenerBase64DeActivo(item);
     const preview = document.getElementById('previewImg');
     const btnFoto = document.getElementById('btnFoto');
+    const fotoExistente = await obtenerBase64DeActivo(item);
+
     if (fotoExistente) {
       preview.src = fotoExistente;
+      preview.style.display = 'block';
+      btnFoto.classList.add('has-photo');
+      btnFoto.innerText = "📷 Cambiar Foto Actual";
+    } else if (item.fotoUrl && item.fotoUrl.startsWith("http")) {
+      preview.src = item.fotoUrl;
       preview.style.display = 'block';
       btnFoto.classList.add('has-photo');
       btnFoto.innerText = "📷 Cambiar Foto Actual";
@@ -831,10 +835,12 @@
     btnGuardar.disabled = true;
     btnGuardar.innerText = editandoId ? "⏳ Actualizando..." : "⏳ Subiendo foto y datos...";
     subiendoAhora = true;
+    ultimaOperacionLocalTs = Date.now();
 
     try {
       if (editandoId) {
-        const idx = activos.findIndex(a => String(a.id) === String(editandoId));
+        const idActual = editandoId;
+        const idx = activos.findIndex(a => String(a.id) === String(idActual));
         if (idx !== -1) {
           const actualizado = {
             ...activos[idx],
@@ -851,7 +857,7 @@
           };
 
           if (fotoBase64Actual) {
-            await guardarFotoIDB(editandoId, fotoBase64Actual);
+            await guardarFotoIDB(idActual, fotoBase64Actual);
           }
 
           activos[idx] = actualizado;
@@ -913,6 +919,7 @@
     } catch (e) {
       console.warn("Guardado local asegurado, pendiente de red:", e);
     } finally {
+      ultimaOperacionLocalTs = Date.now();
       subiendoAhora = false;
       btnGuardar.disabled = false;
       btnGuardar.innerText = editandoId ? "💾 Guardar Cambios" : "💾 Guardar en Inventario FOSSO";
@@ -923,6 +930,7 @@
     if (!confirm("¿Eliminar este registro del historial compartido?")) return;
     if (String(editandoId) === String(id)) activarModoNuevo();
 
+    ultimaOperacionLocalTs = Date.now();
     activos = activos.filter(a => String(a.id) !== String(id)).map((a, idx) => ({ ...a, item: idx + 1 }));
     guardarCacheLigera();
     actualizarUI();
@@ -989,7 +997,7 @@
       const thumbHtml = (fotoLocal && fotoLocal.startsWith("data:image"))
         ? `<img src="${fotoLocal}" class="history-thumb">`
         : (a.fotoUrl && a.fotoUrl.startsWith("http")
-            ? `<img src="${a.fotoUrl}" class="history-thumb" onerror="this.style.display='none'">`
+            ? `<img src="${a.fotoUrl}" class="history-thumb" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=\\'history-thumb\\' style=\\'display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:#163a5f;font-weight:700;text-align:center;\\'>Foto en<br>Drive</div>'">`
             : `<div class="history-thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.68rem;color:#666;">Sin foto</div>`);
 
       return `
